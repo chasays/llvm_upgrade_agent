@@ -1,0 +1,4 @@
+interface:
+  display_name: "Downstream Patch Ledger"
+  short_description: "Track downstream LLVM patches, status, risk, and verification evidence."
+  default_prompt: "Record or update this downstream LLVM patch in the upgrade ledger."

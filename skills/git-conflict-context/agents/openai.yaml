@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Conflict Context"
+  short_description: "Collect base/ours/theirs and history for LLVM rebase conflicts."
+  default_prompt: "Build a three-way conflict context packet for this LLVM upgrade conflict."

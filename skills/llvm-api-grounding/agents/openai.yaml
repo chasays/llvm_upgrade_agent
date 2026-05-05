@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLVM API Grounding"
+  short_description: "Ground LLVM APIs against a local LLVM checkout before editing."
+  default_prompt: "Ground this LLVM API or symbol in the local LLVM source tree before making changes."

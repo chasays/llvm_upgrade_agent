@@ -1,0 +1,4 @@
+interface:
+  display_name: "TableGen Expand"
+  short_description: "Expand LLVM TableGen records before editing or reviewing .td files."
+  default_prompt: "Expand this LLVM TableGen file and summarize the records relevant to the change."

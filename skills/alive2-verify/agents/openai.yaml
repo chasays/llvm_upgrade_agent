@@ -1,0 +1,4 @@
+interface:
+  display_name: "Alive2 Verify"
+  short_description: "Use alive-tv as a semantic gate for LLVM IR transform changes."
+  default_prompt: "Verify this LLVM IR transformation with alive2 and classify the result."

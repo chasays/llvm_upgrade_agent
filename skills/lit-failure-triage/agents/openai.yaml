@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lit Failure Triage"
+  short_description: "Classify LLVM lit/FileCheck failures during an upgrade."
+  default_prompt: "Classify this LLVM lit failure and recommend the next safe action."
