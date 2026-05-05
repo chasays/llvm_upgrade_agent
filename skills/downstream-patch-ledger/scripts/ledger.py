@@ -42,7 +42,7 @@ def git_commit_info(sha):
 
 
 def cmd_init(args):
-    path = Path(args.ledger)
+    path = Path(resolved_ledger(args))
     if not path.exists():
         path.write_text("", encoding="utf-8")
     print(path)
@@ -50,7 +50,8 @@ def cmd_init(args):
 
 
 def cmd_add(args):
-    rows = read_rows(args.ledger)
+    ledger = resolved_ledger(args)
+    rows = read_rows(ledger)
     patch_id = args.patch_id or args.sha
     sha, git_summary, files = git_commit_info(args.sha) if args.sha else ("", "", [])
     row = {
@@ -65,13 +66,14 @@ def cmd_add(args):
     }
     rows = [r for r in rows if r.get("patch_id") != patch_id]
     rows.append(row)
-    write_rows(args.ledger, rows)
+    write_rows(ledger, rows)
     print(json.dumps(row, indent=2, sort_keys=True))
     return 0
 
 
 def cmd_update(args):
-    rows = read_rows(args.ledger)
+    ledger = resolved_ledger(args)
+    rows = read_rows(ledger)
     found = False
     for row in rows:
         if row.get("patch_id") == args.patch_id:
@@ -85,23 +87,34 @@ def cmd_update(args):
             row["updated_at"] = now()
     if not found:
         raise SystemExit(f"patch not found: {args.patch_id}")
-    write_rows(args.ledger, rows)
+    write_rows(ledger, rows)
     return 0
 
 
 def cmd_list(args):
-    rows = read_rows(args.ledger)
+    rows = read_rows(resolved_ledger(args))
     for row in rows:
         print(f"{row.get('patch_id','-')}\t{row.get('status','-')}\t{row.get('risk','-')}\t{row.get('summary','')}")
     return 0
+
+
+def resolved_ledger(args):
+    return getattr(args, "sub_ledger", None) or args.ledger
+
+
+def add_ledger_option(parser):
+    parser.add_argument("--ledger", dest="sub_ledger", help="Ledger path; may also be passed before the subcommand")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ledger", default=DEFAULT_LEDGER)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("init").set_defaults(func=cmd_init)
+    init = sub.add_parser("init")
+    add_ledger_option(init)
+    init.set_defaults(func=cmd_init)
     add = sub.add_parser("add")
+    add_ledger_option(add)
     add.add_argument("--patch-id")
     add.add_argument("--sha", required=True)
     add.add_argument("--summary")
@@ -111,16 +124,18 @@ def main():
     add.add_argument("--note")
     add.set_defaults(func=cmd_add)
     upd = sub.add_parser("update")
+    add_ledger_option(upd)
     upd.add_argument("--patch-id", required=True)
     upd.add_argument("--status")
     upd.add_argument("--risk")
     upd.add_argument("--note")
     upd.set_defaults(func=cmd_update)
-    sub.add_parser("list").set_defaults(func=cmd_list)
+    lst = sub.add_parser("list")
+    add_ledger_option(lst)
+    lst.set_defaults(func=cmd_list)
     args = parser.parse_args()
     return args.func(args)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

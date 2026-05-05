@@ -1,5 +1,7 @@
 import ast
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 
@@ -62,6 +64,19 @@ class SkillPackTest(unittest.TestCase):
         self.assertTrue((ROOT / "BOARD.md").is_file())
         self.assertTrue((ROOT / "AGENTS.md").is_file())
         self.assertTrue((ROOT / "docs" / "mvp-skill-pack.md").is_file())
+
+    def test_ledger_accepts_ledger_argument_after_subcommand(self):
+        script = SKILLS / "downstream-patch-ledger" / "scripts" / "ledger.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "patches.jsonl"
+            proc = subprocess.run(
+                ["python3", str(script), "init", "--ledger", str(ledger)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue(ledger.is_file())
 
 
 if __name__ == "__main__":
