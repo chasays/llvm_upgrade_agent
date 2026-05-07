@@ -19,6 +19,7 @@ EXPECTED_SKILLS = {
     "downstream-patch-ledger",
     "tablegen-expand",
     "patch-progress-dashboard",
+    "cherry-pick-runner",
 }
 
 
@@ -124,6 +125,135 @@ class SkillPackTest(unittest.TestCase):
             self.assertEqual(summary["total"], 2)
             self.assertEqual(summary["states"]["CLEAN"], 1)
             self.assertEqual(summary["states"]["NEED_HUMAN"], 1)
+
+    def test_cherry_pick_runner_writes_default_hybrid_config(self):
+        script = SKILLS / "cherry-pick-runner" / "scripts" / "cherry_pick_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "runner-config.json"
+            proc = subprocess.run(
+                [sys.executable, str(script), "init-config", "--output", str(config)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            data = json.loads(config.read_text(encoding="utf-8"))
+            self.assertEqual(data["worker_count"], 1)
+            self.assertEqual(data["gate_strategy"], "hybrid")
+            self.assertGreater(data["full_gate_interval"], 0)
+            self.assertTrue(data["auto_amend_after_repair"])
+            self.assertEqual(data["build_repair"]["max_attempts"], 3)
+            self.assertEqual(data["test_repair"]["max_attempts"], 2)
+
+    def test_cherry_pick_runner_dry_run_records_hybrid_gate_events(self):
+        script = SKILLS / "cherry-pick-runner" / "scripts" / "cherry_pick_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "patches.jsonl"
+            config = root / "runner-config.json"
+            progress = root / "progress"
+            manifest.write_text(
+                "\n".join(
+                    [
+                        '{"seq":1,"sha":"aaa111","title":"normal patch","risk":"low","files":["llvm/lib/Target/MetaxGPU/A.cpp"]}',
+                        '{"seq":2,"sha":"bbb222","title":"tablegen patch","risk":"low","files":["llvm/lib/Target/MetaxGPU/B.td"]}',
+                        '{"seq":3,"sha":"ccc333","title":"third patch","risk":"low","files":["llvm/lib/Target/MetaxGPU/C.cpp"]}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            config.write_text(
+                json.dumps(
+                    {
+                        "worker_count": 1,
+                        "gate_strategy": "hybrid",
+                        "full_gate_interval": 3,
+                        "quick_build_commands": [],
+                        "quick_test_commands": [],
+                        "full_build_commands": [],
+                        "full_test_commands": [],
+                        "high_risk_patterns": [".td"],
+                        "build_repair": {"max_attempts": 3, "command": []},
+                        "test_repair": {"max_attempts": 2, "command": []},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "run",
+                    "--manifest",
+                    str(manifest),
+                    "--config",
+                    str(config),
+                    "--progress",
+                    str(progress),
+                    "--dry-run",
+                    "--limit",
+                    "3",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            events = [
+                json.loads(line)
+                for line in (progress / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            gates = {
+                event["sha"]: event["gate"]
+                for event in events
+                if event.get("state") == "GATE_SELECTED"
+            }
+            self.assertEqual(gates["aaa111"], "quick")
+            self.assertEqual(gates["bbb222"], "heavy")
+            self.assertEqual(gates["ccc333"], "full")
+
+    def test_cherry_pick_runner_accepts_bom_encoded_manifest(self):
+        script = SKILLS / "cherry-pick-runner" / "scripts" / "cherry_pick_runner.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "patches.jsonl"
+            progress = root / "progress"
+            manifest.write_text(
+                '{"seq":1,"sha":"aaa111","title":"bom patch","risk":"low","files":["llvm/lib/Target/MetaxGPU/A.cpp"]}\n',
+                encoding="utf-8-sig",
+            )
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "run",
+                    "--manifest",
+                    str(manifest),
+                    "--progress",
+                    str(progress),
+                    "--dry-run",
+                    "--limit",
+                    "1",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            events = [
+                json.loads(line)
+                for line in (progress / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(events[-1]["state"], "DONE")
 
 
 if __name__ == "__main__":

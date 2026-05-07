@@ -16,14 +16,55 @@ For Claude Code-style skill directories, copy the same folders into the equivale
 
 Use this when MiniMax M2.5 is only available inside CodeBuddy:
 
-1. The local runner applies/cherry-picks a patch.
-2. `git-conflict-context` generates a conflict work packet.
-3. `llvm-api-grounding` adds verified LLVM 22 API context.
-4. A human pastes the work packet into CodeBuddy.
-5. CodeBuddy/M2.5 performs a focused edit.
-6. The runner verifies with build, lit, `update-test-checks`, `tablegen-expand`, and `alive2-verify`.
-7. `downstream-patch-ledger` records the result.
-8. `patch-progress-dashboard` renders shared progress files into `DASHBOARD.md`, `dashboard.html`, and JSON summaries.
+1. `cherry-pick-runner` applies one patch at a time from the manifest.
+2. Clean or empty cherry-picks are recorded immediately in progress events.
+3. Conflicts produce a work packet through `git-conflict-context` and stop the serial run until resolved.
+4. The runner selects the hybrid gate: quick by default, heavy for high-risk patches, full every `full_gate_interval` patches.
+5. Build failures produce compact repair packets and optionally call a configured build repair command.
+6. Test failures produce compact repair packets and optionally call a configured test repair command.
+7. CodeBuddy/M2.5 performs focused edits from the packet when no API repair worker is configured.
+8. The runner verifies with build, lit, `update-test-checks`, `tablegen-expand`, and `alive2-verify` as configured.
+9. `downstream-patch-ledger` records durable patch state.
+10. `patch-progress-dashboard` renders shared progress files into `DASHBOARD.md`, `dashboard.html`, and JSON summaries.
+
+## Cherry-Pick Runner
+
+Generate a default runner config:
+
+```bash
+python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-config \
+  --output runner-config.json
+```
+
+Generate a manifest from the LLVM 19 downstream range:
+
+```bash
+python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
+  --range old_base..metaxgpu_branch \
+  --output patches.jsonl
+```
+
+Run the strict serial loop:
+
+```bash
+python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py run \
+  --manifest patches.jsonl \
+  --config runner-config.json \
+  --progress progress \
+  --workers 1
+```
+
+The config keeps `worker_count` as a stable field. The MVP supports only `1` writing worker in one worktree. A later multi-worker mode should use separate worktrees plus ordered landing.
+
+The default `gate_strategy` is `hybrid`:
+
+- ordinary patches use quick build/test commands,
+- high-risk patches use heavy build/test commands,
+- every `full_gate_interval` patches use full build/test commands.
+
+`build_repair.command` and `test_repair.command` may point to an internal Claude Code, CodeBuddy, or MiniMax M2.5 wrapper. If no repair command is configured, the runner writes a packet and stops with `NEED_HUMAN`.
+
+When a repair command edits files and the selected gate passes, `auto_amend_after_repair` stages those changed source files and amends the current patch commit. Runner-generated progress, manifest, and config files are ignored by the dirty-worktree check when they live inside the repo.
 
 ## Progress Dashboard
 
@@ -59,6 +100,7 @@ Every patch state transition should append one JSON object to `progress/events.j
 When Claude/GPT-class API access exists, keep the same skills and replace the CodeBuddy manual step with API workers:
 
 - `orchestrator`: owns the patch ledger and state transitions.
+- `cherry-pick-runner`: keeps ordered patch application, hybrid gates, and repair loops.
 - `conflict-resolver`: uses `git-conflict-context`.
 - `api-grounder`: uses `llvm-api-grounding`.
 - `build-fixer`: consumes build errors and validated API signatures.
@@ -82,4 +124,4 @@ python3 /Users/admin/.codex/skills/.system/skill-creator/scripts/quick_validate.
 
 - Scripts do not depend on internal systems.
 - Gerrit, xwiki, and trilium integration points are represented as inputs or future context, not hard-coded clients.
-- The runner itself is not implemented yet; this package creates the skill layer it will call.
+- The first runner mode is strict serial in one worktree. `worker_count` is configurable, but values above `1` require future separate worktree and ordered landing support.

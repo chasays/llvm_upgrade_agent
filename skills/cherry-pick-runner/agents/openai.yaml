@@ -1,0 +1,10 @@
+interface:
+  display_name: "Cherry Pick Runner"
+  short_description: "Drive serial LLVM patch cherry-pick runs with hybrid build/test gates and repair packets."
+  default_prompt: "Run or inspect the serial LLVM cherry-pick runner using worker_count 1 and the hybrid gate strategy."
+runner_defaults:
+  worker_count: 1
+  gate_strategy: "hybrid"
+  full_gate_interval: 50
+  auto_amend_after_repair: true
+  multi_worker_status: "configured but disabled until separate worktrees and ordered landing are implemented"
