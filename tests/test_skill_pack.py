@@ -1,6 +1,8 @@
 import ast
+import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -16,6 +18,7 @@ EXPECTED_SKILLS = {
     "lit-failure-triage",
     "downstream-patch-ledger",
     "tablegen-expand",
+    "patch-progress-dashboard",
 }
 
 
@@ -70,13 +73,57 @@ class SkillPackTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "patches.jsonl"
             proc = subprocess.run(
-                ["python3", str(script), "init", "--ledger", str(ledger)],
+                [sys.executable, str(script), "init", "--ledger", str(ledger)],
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertTrue(ledger.is_file())
+
+    def test_dashboard_renders_progress_outputs(self):
+        script = SKILLS / "patch-progress-dashboard" / "scripts" / "render_dashboard.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            progress = Path(tmp) / "progress"
+            (progress / "agents").mkdir(parents=True)
+            (progress / "packets").mkdir()
+            (progress / "events.jsonl").write_text(
+                "\n".join(
+                    [
+                        '{"ts":"2026-05-07T12:00:00+08:00","agent":"agent-001","sha":"aaa111","seq":1,"state":"CLAIMED","files":["llvm/lib/Target/MetaxGPU/A.cpp"],"message":"claimed"}',
+                        '{"ts":"2026-05-07T12:01:00+08:00","agent":"agent-001","sha":"aaa111","seq":1,"state":"CLEAN","files":["llvm/lib/Target/MetaxGPU/A.cpp"],"message":"clean cherry-pick"}',
+                        '{"ts":"2026-05-07T12:02:00+08:00","agent":"agent-002","sha":"bbb222","seq":2,"state":"NEED_HUMAN","files":["llvm/lib/CodeGen/B.cpp"],"message":"semantic conflict"}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (progress / "agents" / "agent-001.json").write_text(
+                '{"agent":"agent-001","status":"idle","current_sha":"aaa111","current_seq":1,"state":"CLEAN","updated_at":"2026-05-07T12:01:00+08:00"}',
+                encoding="utf-8",
+            )
+            (progress / "agents" / "agent-002.json").write_text(
+                '{"agent":"agent-002","status":"waiting","current_sha":"bbb222","current_seq":2,"state":"NEED_HUMAN","updated_at":"2026-05-07T12:02:00+08:00"}',
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                [sys.executable, str(script), str(progress)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            dashboard = (progress / "DASHBOARD.md").read_text(encoding="utf-8")
+            html = (progress / "dashboard.html").read_text(encoding="utf-8")
+            summary = json.loads((progress / "api" / "summary.json").read_text(encoding="utf-8"))
+            self.assertIn("Total patches: 2", dashboard)
+            self.assertIn("Need human: 1", dashboard)
+            self.assertIn("bbb222", html)
+            self.assertEqual(summary["total"], 2)
+            self.assertEqual(summary["states"]["CLEAN"], 1)
+            self.assertEqual(summary["states"]["NEED_HUMAN"], 1)
 
 
 if __name__ == "__main__":

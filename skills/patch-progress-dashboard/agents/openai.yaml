@@ -1,0 +1,4 @@
+interface:
+  display_name: "Patch Progress Dashboard"
+  short_description: "Render local LLVM cherry-pick progress dashboards from sub-agent event data."
+  default_prompt: "Render or inspect the patch progress dashboard data for the current LLVM upgrade run."
