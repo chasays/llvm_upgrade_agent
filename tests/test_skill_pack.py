@@ -20,6 +20,7 @@ EXPECTED_SKILLS = {
     "tablegen-expand",
     "patch-progress-dashboard",
     "cherry-pick-runner",
+    "metaxgpu-cherry-pick-operator",
 }
 
 
@@ -310,6 +311,42 @@ class SkillPackTest(unittest.TestCase):
                 if line.strip()
             ]
             self.assertEqual(events[-1]["state"], "DONE")
+
+    def test_metaxgpu_operator_marks_latest_attention_patch_done(self):
+        script = SKILLS / "metaxgpu-cherry-pick-operator" / "scripts" / "complete_manual_patch.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            progress = Path(tmp) / "progress"
+            progress.mkdir()
+            (progress / "events.jsonl").write_text(
+                "\n".join(
+                    [
+                        '{"ts":"2026-05-07T12:00:00+08:00","agent":"runner-001","sha":"aaa111","seq":1,"title":"clean","state":"DONE","files":["llvm/lib/Target/MetaxGPU/A.cpp"],"message":"patch completed"}',
+                        '{"ts":"2026-05-07T12:05:00+08:00","agent":"runner-001","sha":"bbb222","seq":2,"title":"conflict","state":"NEED_HUMAN","files":["llvm/lib/TargetParser/Triple.cpp"],"message":"resolve conflict then resume"}',
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                [sys.executable, str(script), "--progress", str(progress), "--agent", "claude-001"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            events = [
+                json.loads(line)
+                for line in (progress / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(events[-1]["sha"], "bbb222")
+            self.assertEqual(events[-1]["state"], "DONE")
+            self.assertEqual(events[-1]["agent"], "claude-001")
+            dashboard = (progress / "DASHBOARD.md").read_text(encoding="utf-8")
+            self.assertIn("Done: 2", dashboard)
+            self.assertIn("Need human: 0", dashboard)
 
 
 if __name__ == "__main__":

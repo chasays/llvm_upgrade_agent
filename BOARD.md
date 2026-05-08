@@ -1,6 +1,6 @@
 # LLVM Upgrade Agent Board
 
-Last reviewed: 2026-05-07
+Last reviewed: 2026-05-08
 
 ## Current MVP
 
@@ -47,11 +47,13 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - [x] 2026-05-08: Limit `patch-progress-dashboard` HTML patch rows to attention items plus recent patches while keeping full patch data in `api/patches.json`.
 - [x] 2026-05-08: Add `docs/claude-preflight.md` documenting the shell preparation steps before launching Claude for the LLVM22 cherry-pick pilot.
 - [x] 2026-05-08: Replace the older intranet startup TODO with `docs/claude-preflight.md` as the single pre-Claude preparation guide.
+- [x] 2026-05-08: Add `docs/ai-agent-share.md` as a leadership and teammate sharing note with Mermaid diagrams explaining the LLVM Upgrade Agent MVP and the value of AI agents.
+- [x] 2026-05-08: Add `metaxgpu-cherry-pick-operator` skill so Claude can respond to short commands like `continue next 20 patches` and `fix conflict`.
 
 ## Blocked
 
 - [ ] MiniMax M2.5 has no public API and can only be used through CodeBuddy. Short-term automation must generate precise work packets for humans to paste into CodeBuddy.
-- [ ] Local official `quick_validate.py` currently needs `PyYAML`; this workstation does not have it installed. The stdlib validator is the active MVP check.
+- [ ] 2026-05-08: Local official `quick_validate.py` currently needs `PyYAML`; this workstation does not have it installed. The stdlib validator is the active MVP check.
 
 ## Decisions
 

@@ -19,13 +19,14 @@ Use this when MiniMax M2.5 is only available inside CodeBuddy:
 1. `cherry-pick-runner` applies one patch at a time from the manifest.
 2. Clean or empty cherry-picks are recorded immediately in progress events.
 3. Conflicts produce a work packet through `git-conflict-context` and stop the serial run until resolved.
-4. The runner selects the hybrid gate: quick by default, heavy for high-risk patches, full every `full_gate_interval` patches.
-5. Build failures produce compact repair packets and optionally call a configured build repair command.
-6. Test failures produce compact repair packets and optionally call a configured test repair command.
-7. CodeBuddy/M2.5 performs focused edits from the packet when no API repair worker is configured.
-8. The runner verifies with build, lit, `update-test-checks`, `tablegen-expand`, and `alive2-verify` as configured.
-9. `downstream-patch-ledger` records durable patch state.
-10. `patch-progress-dashboard` renders shared progress files into `DASHBOARD.md`, `dashboard.html`, and JSON summaries.
+4. `metaxgpu-cherry-pick-operator` gives Claude short operational commands such as `continue next 20 patches` and `fix conflict`.
+5. The runner selects the hybrid gate: quick by default, heavy for high-risk patches, full every `full_gate_interval` patches.
+6. Build failures produce compact repair packets and optionally call a configured build repair command.
+7. Test failures produce compact repair packets and optionally call a configured test repair command.
+8. CodeBuddy/M2.5 performs focused edits from the packet when no API repair worker is configured.
+9. The runner verifies with build, lit, `update-test-checks`, `tablegen-expand`, and `alive2-verify` as configured.
+10. `downstream-patch-ledger` records durable patch state.
+11. `patch-progress-dashboard` renders shared progress files into `DASHBOARD.md`, `dashboard.html`, and JSON summaries.
 
 ## Cherry-Pick Runner
 
@@ -55,6 +56,16 @@ python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py run \
 ```
 
 The config keeps `worker_count` as a stable field. The MVP supports only `1` writing worker in one worktree. A later multi-worker mode should use separate worktrees plus ordered landing.
+
+For Claude-side operation after preflight setup, use `metaxgpu-cherry-pick-operator`:
+
+```text
+continue next patch
+continue next 20 patches
+fix conflict
+```
+
+The skill keeps each run bounded, stops on attention states, and can mark a manually resolved patch as `DONE` after `git cherry-pick --continue`.
 
 The default `gate_strategy` is `hybrid`:
 

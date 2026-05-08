@@ -1,0 +1,4 @@
+interface:
+  display_name: "MetaxGPU Cherry-Pick Operator"
+  short_description: "Drive continue-next and fix-conflict workflows for the LLVM22 MetaxGPU cherry-pick pilot."
+  default_prompt: "Continue the next MetaxGPU LLVM cherry-pick patch or fix the stopped conflict without running ahead."

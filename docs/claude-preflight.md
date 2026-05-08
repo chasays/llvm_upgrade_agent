@@ -232,19 +232,38 @@ What this does:
 - Starts Claude in the prepared LLVM22 repo.
 - The workspace now has the manifest, config, branch, and skills needed for controlled one-patch-at-a-time work.
 
-Initial Claude instruction should keep it bounded:
+The installed `metaxgpu-cherry-pick-operator` skill is the preferred interface after Claude starts. With that skill installed, the user should be able to use short commands:
 
 ```text
-Run exactly one command invocation of the cherry-pick runner with --limit 1.
-Use patches-master.jsonl, runner-config.json, and progress-master.
-Do not retry.
-Do not resume.
-Do not run another patch.
-Do not resolve conflicts manually unless the runner stops and you inspect the generated packet first.
-After the command exits, print git status --short and sed -n "1,120p" progress-master/DASHBOARD.md, then stop.
+continue next patch
+continue next 20 patches
+fix conflict
 ```
 
-Runner command for Claude:
+Use the longer prompts below only if the skill is not installed or Claude does not trigger it.
+
+## 9. Prompt: Start First Real Patch
+
+Use this immediately after launching Claude for the first real patch:
+
+```text
+Use the metaxgpu-cherry-pick-operator skill.
+
+Start the real pilot by running exactly one next unfinished patch.
+
+Rules:
+- Work in the current LLVM22 repo.
+- Branch must be metaxgpu-llvm22-pilot.
+- Use patches-master.jsonl, runner-config.json, and progress-master.
+- Run exactly one cherry-pick runner invocation with --limit 1.
+- Do not retry.
+- Do not resume.
+- Do not run another patch.
+- Do not resolve conflicts manually unless the runner stops and you inspect the generated packet first.
+- After the command exits, print git status --short and sed -n "1,120p" progress-master/DASHBOARD.md, then stop.
+```
+
+The runner command behind this prompt is:
 
 ```bash
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
@@ -254,3 +273,87 @@ python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
   --workers 1 \
   --limit 1
 ```
+
+## 10. Prompt: Continue Next N Patches
+
+Use this after previous patches are `DONE` and the worktree has no unresolved conflict:
+
+```text
+Use the metaxgpu-cherry-pick-operator skill.
+
+Continue the next <N> unfinished MetaxGPU patches.
+
+Rules:
+- Run exactly one cherry-pick runner invocation with --limit <N>.
+- Use existing patches-master.jsonl, runner-config.json, and progress-master.
+- Before running, print git branch --show-current and git status --short.
+- Stop if branch is not metaxgpu-llvm22-pilot.
+- Stop if there are modified tracked files or unmerged files.
+- If all selected patches are DONE, print git status --short and sed -n "1,180p" progress-master/DASHBOARD.md, then stop.
+- If the runner stops with CONFLICT, NEED_HUMAN, BLOCKED, BUILD_FAILED, or TEST_FAILED, print git status --short, print sed -n "1,180p" progress-master/DASHBOARD.md, list progress-master/packets/, and stop.
+- Do not run another runner invocation.
+- Do not manually resolve conflicts in this continue step.
+```
+
+Example:
+
+```text
+continue next 20 patches
+```
+
+## 11. Prompt: Fix Current Conflict
+
+Use this only after the runner has stopped at `CONFLICT` or `NEED_HUMAN`.
+
+```text
+Use the metaxgpu-cherry-pick-operator skill.
+
+Fix the current stopped cherry-pick conflict only.
+
+Rules:
+- Do not run the cherry-pick runner.
+- Do not continue to another patch.
+- Read progress-master/DASHBOARD.md.
+- Read the newest packet under progress-master/packets/.
+- Inspect only conflicted files from git diff --name-only --diff-filter=U.
+- For conflicted files, collect or read three-way context with git-conflict-context.
+- Preserve existing upstream LLVM22 changes.
+- Preserve previous MetaxGPU changes already on this branch.
+- Apply only the current patch intent.
+- Ground renamed LLVM APIs before editing.
+- Make the smallest safe conflict resolution.
+
+After editing:
+1. Run git diff --name-only --diff-filter=U; it must be empty.
+2. Run git diff --check.
+3. Run the configured LLVM22 build command if available. If no LLVM22 build command exists, say that build verification was not run.
+4. If checks pass, run git add <resolved-files>.
+5. Run git cherry-pick --continue.
+6. If cherry-pick --continue succeeds, run:
+   python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py --progress progress-master --agent claude-001
+7. Print git log -1 --oneline, git status --short, and sed -n "1,180p" progress-master/DASHBOARD.md.
+8. Stop.
+```
+
+Short form after the skill is installed:
+
+```text
+fix conflict
+```
+
+## 12. Progress Repair After Manual Fix
+
+If a human resolves the conflict outside Claude and `git cherry-pick --continue` succeeds, update the progress dashboard with:
+
+```bash
+python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py \
+  --progress progress-master \
+  --agent manual
+```
+
+What this does:
+
+- Finds the latest `CONFLICT`, `NEED_HUMAN`, `BLOCKED`, `BUILD_FAILED`, or `TEST_FAILED` event.
+- Appends a `DONE` event for the same original patch sha.
+- Updates the agent heartbeat.
+- Re-renders `progress-master/DASHBOARD.md`, `progress-master/dashboard.html`, and `progress-master/api/*.json`.
