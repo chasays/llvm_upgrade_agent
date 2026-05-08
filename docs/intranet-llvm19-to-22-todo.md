@@ -10,18 +10,20 @@ LLVM22_REPO="$HOME/llvm22/llvm-project"
 AGENT_REPO="$HOME/llvm_upgrade_agent"
 CLAUDE_SKILLS="$HOME/.claude/skills"
 
-LLVM19_BASE_REF="llvm19-base"
+LLVM19_BASE_HASH="ab51eccf88f532"
 METAXGPU_SOURCE_REF="master"
+METAXGPU_FIRST_HASH="39bc139c133f5c0a0015f648c44c93a5e66d9998"
 ```
 
 Current branch meaning:
 
-- `llvm19-base`: the community LLVM 19.1.3 base commit used by the MetaxGPU LLVM19 fork.
+- `ab51eccf88f532`: the known community LLVM 19.1.3 base commit used by the MetaxGPU LLVM19 fork.
 - `master`: weekly integrated LLVM19 + MetaxGPU downstream branch.
 - `development`: daily development LLVM19 + MetaxGPU downstream branch.
 - `metaxgpu-branch` in earlier notes means the downstream source branch to migrate. Use `master` first unless the goal is latest development state.
+- `39bc139c133f5c0a0015f648c44c93a5e66d9998`: the first known MetaxGPU downstream cherry-pick on `master`.
 
-`LLVM19_BASE_REF` and `METAXGPU_SOURCE_REF` can be branch names, tag names, or commit hashes. For the first formal run, resolve both to hashes and use the hash range so the generated manifest cannot change when `master` or `development` moves later.
+There is no required `llvm19-base` branch in the intranet repo. Use `LLVM19_BASE_HASH` directly. `METAXGPU_SOURCE_REF` can be a branch name, tag name, or commit hash. For the first formal run, resolve the source endpoint to a hash and use the hash range so the generated manifest cannot change when `master` or `development` moves later.
 
 Do not copy LLVM source trees into `~/.claude/skills/`. Only copy the agent skills.
 
@@ -55,29 +57,25 @@ cd "$LLVM19_REPO"
 
 git fetch --all --prune
 
-git rev-parse "$LLVM19_BASE_REF"
-git show -s --format='%H%n%ci%n%an <%ae>%n%s' "$LLVM19_BASE_REF"
-git tag --contains "$LLVM19_BASE_REF" | grep 'llvmorg-19' | head
-git describe --contains "$LLVM19_BASE_REF"
+git rev-parse "$LLVM19_BASE_HASH"
+git show -s --format='%H%n%ci%n%an <%ae>%n%s' "$LLVM19_BASE_HASH"
+git tag --contains "$LLVM19_BASE_HASH" | grep 'llvmorg-19' | head
+git describe --contains "$LLVM19_BASE_HASH"
 ```
 
-If `llvm19-base` only exists as a remote branch:
+Confirm the first known MetaxGPU commit starts immediately after that base:
 
 ```bash
-LLVM19_BASE_REF="origin/llvm19-base"
-
-git rev-parse "$LLVM19_BASE_REF"
-git show -s --format='%H%n%ci%n%an <%ae>%n%s' "$LLVM19_BASE_REF"
-git tag --contains "$LLVM19_BASE_REF" | grep 'llvmorg-19' | head
-git describe --contains "$LLVM19_BASE_REF"
+git show -s --format='%H%nparents: %P%ncommitter-date: %ci%nsubject: %s' "$METAXGPU_FIRST_HASH"
+FIRST_PARENT=$(git rev-parse "${METAXGPU_FIRST_HASH}^")
+test "$FIRST_PARENT" = "$(git rev-parse "$LLVM19_BASE_HASH")" && echo "first MetaxGPU commit parent OK"
 ```
 
-Resolve the base and source endpoint to fixed hashes:
+Resolve the source endpoint to a fixed hash:
 
 ```bash
 METAXGPU_SOURCE_REF="master"
 
-LLVM19_BASE_HASH=$(git -C "$LLVM19_REPO" rev-parse "$LLVM19_BASE_REF")
 METAXGPU_SOURCE_HASH=$(git -C "$LLVM19_REPO" rev-parse "$METAXGPU_SOURCE_REF")
 
 printf 'LLVM19_BASE_HASH=%s\n' "$LLVM19_BASE_HASH"
@@ -93,7 +91,7 @@ Record the result:
 LLVM19_BASE_HASH=
 METAXGPU_SOURCE_HASH=
 LLVM19_RELEASE_TAG=llvmorg-19.1.3
-LLVM19_BASE_REF=llvm19-base
+METAXGPU_FIRST_HASH=39bc139c133f5c0a0015f648c44c93a5e66d9998
 METAXGPU_SOURCE_REF=master
 ```
 
@@ -110,7 +108,6 @@ git config merge.conflictStyle diff3
 
 git remote get-url metax19 || git remote add metax19 "$LLVM19_REPO"
 git fetch metax19 \
-  llvm19-base:refs/remotes/metax19/llvm19-base \
   master:refs/remotes/metax19/master \
   development:refs/remotes/metax19/development
 ```
@@ -144,7 +141,6 @@ Stable weekly-integrated source first:
 ```bash
 cd "$LLVM22_REPO"
 
-LLVM19_BASE_HASH=$(git -C "$LLVM19_REPO" rev-parse "$LLVM19_BASE_REF")
 METAXGPU_SOURCE_HASH=$(git -C "$LLVM19_REPO" rev-parse master)
 
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
@@ -159,7 +155,7 @@ Equivalent ref-based range, useful for quick inspection but less stable if the b
 
 ```bash
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
-  --range metax19/llvm19-base..metax19/master \
+  --range "$LLVM19_BASE_HASH..metax19/master" \
   --output patches-master-ref-range.jsonl
 ```
 

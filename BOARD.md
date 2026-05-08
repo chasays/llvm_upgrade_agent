@@ -16,7 +16,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 
 ## Doing
 
-- [ ] Confirm the internal `llvm19-base` commit ID for LLVM 19.1.3 and fill the first-run record in `docs/intranet-llvm19-to-22-todo.md`.
+- [ ] Verify on the intranet host that `ab51eccf88f532` is the LLVM 19.1.3 base commit and that `39bc139c133f5c0a0015f648c44c93a5e66d9998^` matches it.
 - [ ] Pilot the skill pack on 20 representative downstream patches.
 - [ ] Fill internal paths for LLVM source, LLVM build, alive-tv, Gerrit, xwiki, and trilium.
 - [ ] Pilot the `patch-progress-dashboard` protocol during a 20-patch cherry-pick run.
@@ -42,6 +42,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - [x] Add `cherry-pick-runner` skill with `worker_count: 1`, hybrid gate selection, dry-run validation, repair packets, and optional build/test repair commands.
 - [x] 2026-05-07: Add intranet Ubuntu startup TODO for installing skills, confirming the LLVM 19.1.3 base hash, generating manifests, and running the first 20-patch pilot.
 - [x] 2026-05-07: Clarify in the intranet TODO that `llvm19-base` and the MetaxGPU source endpoint can be refs or hashes, and that formal manifests should use resolved hash ranges.
+- [x] 2026-05-08: Update intranet TODO for the real repo shape: no `llvm19-base` branch, LLVM 19.1.3 base hash is `ab51eccf88f532`, source endpoint remains `master` by default.
 
 ## Blocked
 
