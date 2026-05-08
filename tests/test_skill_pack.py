@@ -126,6 +126,62 @@ class SkillPackTest(unittest.TestCase):
             self.assertEqual(summary["states"]["CLEAN"], 1)
             self.assertEqual(summary["states"]["NEED_HUMAN"], 1)
 
+    def test_dashboard_html_limits_bulk_patch_rows(self):
+        script = SKILLS / "patch-progress-dashboard" / "scripts" / "render_dashboard.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            progress = Path(tmp) / "progress"
+            progress.mkdir()
+            events = []
+            for seq in range(1, 251):
+                sha = f"done{seq:03d}"
+                events.append(
+                    json.dumps(
+                        {
+                            "ts": f"2026-05-07T12:{seq % 60:02d}:00+08:00",
+                            "agent": "agent-001",
+                            "sha": sha,
+                            "seq": seq,
+                            "state": "DONE",
+                            "files": [f"llvm/lib/Target/MetaxGPU/File{seq}.cpp"],
+                            "message": f"done patch {seq}",
+                        },
+                        sort_keys=True,
+                    )
+                )
+            events.append(
+                json.dumps(
+                    {
+                        "ts": "2026-05-07T13:00:00+08:00",
+                        "agent": "agent-001",
+                        "sha": "needhuman999",
+                        "seq": 251,
+                        "state": "NEED_HUMAN",
+                        "files": ["llvm/lib/TargetParser/Triple.cpp"],
+                        "message": "semantic conflict",
+                    },
+                    sort_keys=True,
+                )
+            )
+            (progress / "events.jsonl").write_text("\n".join(events) + "\n", encoding="utf-8")
+
+            proc = subprocess.run(
+                [sys.executable, str(script), str(progress)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            html = (progress / "dashboard.html").read_text(encoding="utf-8")
+            patches = json.loads((progress / "api" / "patches.json").read_text(encoding="utf-8"))
+            self.assertIn("api/patches.json", html)
+            self.assertIn("needhuman999", html)
+            self.assertIn("done250", html)
+            self.assertNotIn("done001", html)
+            self.assertLess(len(html), 90000)
+            self.assertEqual(len(patches), 251)
+            self.assertEqual(patches[0]["sha"], "done001")
+
     def test_cherry_pick_runner_writes_default_hybrid_config(self):
         script = SKILLS / "cherry-pick-runner" / "scripts" / "cherry_pick_runner.py"
         with tempfile.TemporaryDirectory() as tmp:

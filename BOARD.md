@@ -43,6 +43,10 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - [x] 2026-05-07: Add intranet Ubuntu startup TODO for installing skills, confirming the LLVM 19.1.3 base hash, generating manifests, and running the first 20-patch pilot.
 - [x] 2026-05-07: Clarify in the intranet TODO that `llvm19-base` and the MetaxGPU source endpoint can be refs or hashes, and that formal manifests should use resolved hash ranges.
 - [x] 2026-05-08: Update intranet TODO for the real repo shape: no `llvm19-base` branch, LLVM 19.1.3 base hash is `ab51eccf88f532`, source endpoint remains `master` by default.
+- [x] 2026-05-08: Simplify the intranet TODO to the `master` source branch only; remove `development` fetch and manifest steps.
+- [x] 2026-05-08: Limit `patch-progress-dashboard` HTML patch rows to attention items plus recent patches while keeping full patch data in `api/patches.json`.
+- [x] 2026-05-08: Add `docs/claude-preflight.md` documenting the shell preparation steps before launching Claude for the LLVM22 cherry-pick pilot.
+- [x] 2026-05-08: Replace the older intranet startup TODO with `docs/claude-preflight.md` as the single pre-Claude preparation guide.
 
 ## Blocked
 
@@ -64,7 +68,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 1. Read this board.
 2. Read the active docs:
    - `docs/mvp-skill-pack.md`
-   - `docs/intranet-llvm19-to-22-todo.md`
+   - `docs/claude-preflight.md`
    - `0505.md`
    - `llvm19_22_conflict_research.md`
 3. Run `python3 tests/test_skill_pack.py`.

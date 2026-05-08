@@ -14,6 +14,8 @@ from pathlib import Path
 FINAL_STATES = {"CLEAN", "EMPTY", "CONFLICT_FIXED", "BUILD_PASSED", "TEST_PASSED", "DONE"}
 ATTENTION_STATES = {"NEED_HUMAN", "BLOCKED", "BUILD_FAILED", "TEST_FAILED"}
 DEFAULT_STATE = "PENDING"
+HTML_PATCH_ROW_LIMIT = 200
+HTML_FILE_PREVIEW_LIMIT = 3
 
 
 def utc_now() -> str:
@@ -107,6 +109,38 @@ def hotspot_counts(patches: list[dict]) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
+def select_html_patches(patches: list[dict], limit: int = HTML_PATCH_ROW_LIMIT) -> list[dict]:
+    if limit <= 0:
+        return []
+    selected: list[dict] = []
+    seen: set[str] = set()
+
+    def add(patch: dict) -> None:
+        sha = str(patch.get("sha", "")).strip()
+        key = sha or f"seq:{patch.get('seq', '')}"
+        if key in seen or len(selected) >= limit:
+            return
+        selected.append(patch)
+        seen.add(key)
+
+    for patch in patches:
+        if patch.get("state") in ATTENTION_STATES or patch.get("state") == "CONFLICT":
+            add(patch)
+    for patch in reversed(patches):
+        add(patch)
+    return sorted(selected, key=patch_sort_key)
+
+
+def compact_files(files: list[str] | str) -> str:
+    if isinstance(files, str):
+        files = [files]
+    visible = [str(file_name) for file_name in files[:HTML_FILE_PREVIEW_LIMIT]]
+    remaining = len(files) - len(visible)
+    if remaining > 0:
+        visible.append(f"+ {remaining} more")
+    return ", ".join(visible)
+
+
 def write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -193,6 +227,8 @@ def render_markdown(summary: dict, patches: list[dict], agents: list[dict], hots
 
 
 def render_html(summary: dict, patches: list[dict], agents: list[dict], hotspots: dict[str, int]) -> str:
+    selected_patches = select_html_patches(patches)
+    omitted_patches = max(len(patches) - len(selected_patches), 0)
     state_cards = "".join(
         f"<div class='metric'><span>{escape(state)}</span><strong>{count}</strong></div>"
         for state, count in summary["states"].items()
@@ -213,12 +249,17 @@ def render_html(summary: dict, patches: list[dict], agents: list[dict], hotspots
         f"<td>{escape(str(patch.get('sha', '')))}</td>"
         f"<td>{escape(str(patch.get('state', '')))}</td>"
         f"<td>{escape(str(patch.get('agent', '')))}</td>"
-        f"<td>{escape(', '.join(str(file_name) for file_name in patch.get('files', [])))}</td>"
+        f"<td>{escape(compact_files(patch.get('files', [])))}</td>"
         f"<td>{escape(str(patch.get('message', '')))}</td>"
         "</tr>"
-        for patch in patches
+        for patch in selected_patches
     )
     hotspot_items = "".join(f"<li>{escape(path)} <strong>{count}</strong></li>" for path, count in hotspots.items())
+    patch_note = (
+        f"Showing {len(selected_patches)} patches in HTML"
+        + (f"; {omitted_patches} older completed patches omitted" if omitted_patches else "")
+        + '. Full data is in <a href="api/patches.json">api/patches.json</a>.'
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -233,6 +274,7 @@ def render_html(summary: dict, patches: list[dict], agents: list[dict], hotspots
     h1 {{ font-size: 24px; margin: 0 0 8px; }}
     h2 {{ font-size: 18px; margin: 24px 0 10px; }}
     .muted {{ color: #59636e; }}
+    a {{ color: #0969da; }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }}
     .metric {{ background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; padding: 12px; }}
     .metric span {{ display: block; color: #59636e; font-size: 12px; }}
@@ -265,6 +307,7 @@ def render_html(summary: dict, patches: list[dict], agents: list[dict], hotspots
     <h2>Failure Hotspots</h2>
     <ul>{hotspot_items or '<li>none <strong>0</strong></li>'}</ul>
     <h2>Patches</h2>
+    <p class="muted">{patch_note}</p>
     <table><thead><tr><th>Seq</th><th>SHA</th><th>State</th><th>Agent</th><th>Files</th><th>Message</th></tr></thead><tbody>{patch_rows}</tbody></table>
   </main>
 </body>
