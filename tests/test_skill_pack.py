@@ -554,6 +554,25 @@ class SkillPackTest(unittest.TestCase):
             self.assertIn("Done: 2", dashboard)
             self.assertIn("Need human: 0", dashboard)
 
+    def test_metaxgpu_operator_uses_parent_output_layout(self):
+        script = SKILLS / "metaxgpu-cherry-pick-operator" / "scripts" / "complete_manual_patch.py"
+        help_proc = subprocess.run(
+            [sys.executable, str(script), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        self.assertEqual(help_proc.returncode, 0, help_proc.stderr)
+        self.assertIn("../output/progress-master", help_proc.stdout)
+
+        operator_doc = (SKILLS / "metaxgpu-cherry-pick-operator" / "SKILL.md").read_text(encoding="utf-8")
+        preflight_doc = (ROOT / "docs" / "claude-preflight.md").read_text(encoding="utf-8")
+        for text in (operator_doc, preflight_doc):
+            self.assertIn("../output/patches-master.jsonl", text)
+            self.assertIn("../output/runner-config.json", text)
+            self.assertIn("../output/progress-master", text)
+
     def test_agent_memory_records_promotes_and_searches_trusted_memory(self):
         script = SKILLS / "agent-memory" / "scripts" / "memory.py"
         with tempfile.TemporaryDirectory() as tmp:

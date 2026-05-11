@@ -20,6 +20,7 @@ LLVM19_REPO="$HOME/llvm22_upgrade/llvm19_metaxgpu"
 LLVM22_REPO="$HOME/llvm22_upgrade/llvm-project"
 AGENT_REPO="$HOME/llvm22_upgrade/llvm_upgrade_agent"
 CLAUDE_SKILLS="$HOME/.claude/skills"
+OUTPUT_DIR="$HOME/llvm22_upgrade/output"
 
 LLVM19_BASE_HASH="ab51eccf88f532"
 METAXGPU_SOURCE_REF="master"
@@ -29,6 +30,7 @@ echo "$LLVM19_REPO"
 echo "$LLVM22_REPO"
 echo "$AGENT_REPO"
 echo "$CLAUDE_SKILLS"
+echo "$OUTPUT_DIR"
 ```
 
 What this does:
@@ -37,6 +39,7 @@ What this does:
 - `LLVM22_REPO` is the LLVM22 target repo where cherry-picks are applied.
 - `AGENT_REPO` is this skill-pack repo.
 - `CLAUDE_SKILLS` is the Claude skills directory.
+- `OUTPUT_DIR` is outside the LLVM22 repo so manifests, config, and progress do not pollute `git status`.
 - `LLVM19_BASE_HASH` is the LLVM 19.1.3 base commit.
 - `METAXGPU_FIRST_HASH` is the first known MetaxGPU downstream cherry-pick on `master`.
 - `METAXGPU_SOURCE_REF=master` means the pilot only migrates the weekly integrated branch.
@@ -133,6 +136,7 @@ That pattern is safe, but it prints `No such remote` the first time. The `if` bl
 
 ```bash
 cd "$LLVM22_REPO"
+mkdir -p "$OUTPUT_DIR"
 
 export LLVM19_BASE_HASH="ab51eccf88f532"
 export METAXGPU_FIRST_HASH="39bc139c133f5c0a0015f648c44c93a5e66d9998"
@@ -145,25 +149,26 @@ test "$(git rev-parse "${METAXGPU_FIRST_HASH}^")" = "$(git rev-parse "$LLVM19_BA
 
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
   --range "$LLVM19_BASE_HASH..$METAXGPU_SOURCE_HASH" \
-  --output patches-master.jsonl
+  --output "$OUTPUT_DIR/patches-master.jsonl"
 
-wc -l patches-master.jsonl
-sed -n '1,5p' patches-master.jsonl
+wc -l "$OUTPUT_DIR/patches-master.jsonl"
+sed -n '1,5p' "$OUTPUT_DIR/patches-master.jsonl"
 
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py init-config \
-  --output runner-config.json
+  --output "$OUTPUT_DIR/runner-config.json"
 ```
 
 What this does:
 
-- Uses the base hash and fetched `metax19/master` endpoint to build `patches-master.jsonl`.
+- Uses the base hash and fetched `metax19/master` endpoint to build `$OUTPUT_DIR/patches-master.jsonl`.
 - Keeps the manifest fixed even if `master` moves later.
-- Creates `runner-config.json`, where build/test commands can be filled in later.
+- Creates `$OUTPUT_DIR/runner-config.json`, where build/test commands can be filled in later.
+- Keeps runner control files outside the LLVM22 repo so `git status` stays focused on source changes.
 
 Expected pilot result from the current repo shape:
 
 ```text
-6031 patches-master.jsonl
+6031 $OUTPUT_DIR/patches-master.jsonl
 ```
 
 The first manifest entry should be `39bc139c133f5c0a0015f648c44c93a5e66d9998`.
@@ -174,14 +179,14 @@ The first manifest entry should be `39bc139c133f5c0a0015f648c44c93a5e66d9998`.
 cd "$LLVM22_REPO"
 
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
-  --manifest patches-master.jsonl \
-  --config runner-config.json \
-  --progress progress-master \
+  --manifest "$OUTPUT_DIR/patches-master.jsonl" \
+  --config "$OUTPUT_DIR/runner-config.json" \
+  --progress "$OUTPUT_DIR/progress-master" \
   --workers 1 \
   --limit 20 \
   --dry-run
 
-sed -n '1,200p' progress-master/DASHBOARD.md
+sed -n '1,200p' "$OUTPUT_DIR/progress-master/DASHBOARD.md"
 ```
 
 What this does:
@@ -189,7 +194,7 @@ What this does:
 - Exercises manifest ordering and dashboard rendering without changing the LLVM22 worktree.
 - Confirms the runner can process the first 20 manifest entries.
 
-Important: dry-run writes `DONE` events into `progress-master`. Remove this dry-run progress before real cherry-pick work, or the real runner will skip those entries.
+Important: dry-run writes `DONE` events into `$OUTPUT_DIR/progress-master`. Remove this dry-run progress before real cherry-pick work, or the real runner will skip those entries.
 
 ## 7. Create Pilot Branch And Clear Dry-Run Progress
 
@@ -202,7 +207,7 @@ git log -1 --oneline
 
 git switch -c metaxgpu-llvm22-pilot
 
-rm -rf progress-master
+rm -rf "$OUTPUT_DIR/progress-master"
 
 git branch --show-current
 git status --short
@@ -218,7 +223,7 @@ What this does:
 
 - Moves real cherry-pick work off the LLVM22 release tag onto a dedicated branch.
 - Removes dry-run progress so real `DONE` events reflect actual cherry-pick commits.
-- Leaves `patches-master.jsonl` and `runner-config.json` in the working tree as runner control files.
+- Leaves `$OUTPUT_DIR/patches-master.jsonl` and `$OUTPUT_DIR/runner-config.json` outside the LLVM22 working tree as runner control files.
 
 ## 8. Start Claude
 
@@ -254,22 +259,22 @@ Start the real pilot by running exactly one next unfinished patch.
 Rules:
 - Work in the current LLVM22 repo.
 - Branch must be metaxgpu-llvm22-pilot.
-- Use patches-master.jsonl, runner-config.json, and progress-master.
+- Use ../output/patches-master.jsonl, ../output/runner-config.json, and ../output/progress-master.
 - Run exactly one cherry-pick runner invocation with --limit 1.
 - Do not retry.
 - Do not resume.
 - Do not run another patch.
 - Do not resolve conflicts manually unless the runner stops and you inspect the generated packet first.
-- After the command exits, print git status --short and sed -n "1,120p" progress-master/DASHBOARD.md, then stop.
+- After the command exits, print git status --short and sed -n "1,120p" ../output/progress-master/DASHBOARD.md, then stop.
 ```
 
 The runner command behind this prompt is:
 
 ```bash
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
-  --manifest patches-master.jsonl \
-  --config runner-config.json \
-  --progress progress-master \
+  --manifest ../output/patches-master.jsonl \
+  --config ../output/runner-config.json \
+  --progress ../output/progress-master \
   --workers 1 \
   --limit 1
 ```
@@ -285,12 +290,12 @@ Continue the next <N> unfinished MetaxGPU patches.
 
 Rules:
 - Run exactly one cherry-pick runner invocation with --limit <N>.
-- Use existing patches-master.jsonl, runner-config.json, and progress-master.
+- Use existing ../output/patches-master.jsonl, ../output/runner-config.json, and ../output/progress-master.
 - Before running, print git branch --show-current and git status --short.
 - Stop if branch is not metaxgpu-llvm22-pilot.
 - Stop if there are modified tracked files or unmerged files.
-- If all selected patches are DONE, print git status --short and sed -n "1,180p" progress-master/DASHBOARD.md, then stop.
-- If the runner stops with CONFLICT, NEED_HUMAN, BLOCKED, BUILD_FAILED, or TEST_FAILED, print git status --short, print sed -n "1,180p" progress-master/DASHBOARD.md, list progress-master/packets/, and stop.
+- If all selected patches are DONE, print git status --short and sed -n "1,180p" ../output/progress-master/DASHBOARD.md, then stop.
+- If the runner stops with CONFLICT, NEED_HUMAN, BLOCKED, BUILD_FAILED, or TEST_FAILED, print git status --short, print sed -n "1,180p" ../output/progress-master/DASHBOARD.md, list ../output/progress-master/packets/, and stop.
 - Do not run another runner invocation.
 - Do not manually resolve conflicts in this continue step.
 ```
@@ -313,8 +318,8 @@ Fix the current stopped cherry-pick conflict only.
 Rules:
 - Do not run the cherry-pick runner.
 - Do not continue to another patch.
-- Read progress-master/DASHBOARD.md.
-- Read the newest packet under progress-master/packets/.
+- Read ../output/progress-master/DASHBOARD.md.
+- Read the newest packet under ../output/progress-master/packets/.
 - Inspect only conflicted files from git diff --name-only --diff-filter=U.
 - For conflicted files, collect or read three-way context with git-conflict-context.
 - Preserve existing upstream LLVM22 changes.
@@ -330,8 +335,8 @@ After editing:
 4. If checks pass, run git add <resolved-files>.
 5. Run git cherry-pick --continue.
 6. If cherry-pick --continue succeeds, run:
-   python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py --progress progress-master --agent claude-001
-7. Print git log -1 --oneline, git status --short, and sed -n "1,180p" progress-master/DASHBOARD.md.
+   python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py --progress ../output/progress-master --agent claude-001
+7. Print git log -1 --oneline, git status --short, and sed -n "1,180p" ../output/progress-master/DASHBOARD.md.
 8. Stop.
 ```
 
@@ -347,7 +352,7 @@ If a human resolves the conflict outside Claude and `git cherry-pick --continue`
 
 ```bash
 python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py \
-  --progress progress-master \
+  --progress ../output/progress-master \
   --agent manual
 ```
 
@@ -356,4 +361,4 @@ What this does:
 - Finds the latest `CONFLICT`, `NEED_HUMAN`, `BLOCKED`, `BUILD_FAILED`, or `TEST_FAILED` event.
 - Appends a `DONE` event for the same original patch sha.
 - Updates the agent heartbeat.
-- Re-renders `progress-master/DASHBOARD.md`, `progress-master/dashboard.html`, and `progress-master/api/*.json`.
+- Re-renders `../output/progress-master/DASHBOARD.md`, `../output/progress-master/dashboard.html`, and `../output/progress-master/api/*.json`.

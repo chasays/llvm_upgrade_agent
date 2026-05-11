@@ -34,8 +34,9 @@ Use this when MiniMax M2.5 is only available inside CodeBuddy:
 Generate a default runner config:
 
 ```bash
+mkdir -p ../output
 python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-config \
-  --output runner-config.json
+  --output ../output/runner-config.json
 ```
 
 Generate a manifest from the LLVM 19 downstream range:
@@ -43,16 +44,16 @@ Generate a manifest from the LLVM 19 downstream range:
 ```bash
 python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
   --range old_base..metaxgpu_branch \
-  --output patches.jsonl
+  --output ../output/patches.jsonl
 ```
 
 Run the strict serial loop:
 
 ```bash
 python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py run \
-  --manifest patches.jsonl \
-  --config runner-config.json \
-  --progress progress \
+  --manifest ../output/patches.jsonl \
+  --config ../output/runner-config.json \
+  --progress ../output/progress \
   --workers 1
 ```
 
@@ -76,7 +77,7 @@ The default `gate_strategy` is `hybrid`:
 
 `build_repair.command` and `test_repair.command` may point to an internal Claude Code, CodeBuddy, or MiniMax M2.5 wrapper. If no repair command is configured, the runner writes a packet and stops with `NEED_HUMAN`.
 
-When a repair command edits files and the selected gate passes, `auto_amend_after_repair` stages those changed source files and amends the current patch commit. Runner-generated progress, manifest, and config files are ignored by the dirty-worktree check when they live inside the repo.
+When a repair command edits files and the selected gate passes, `auto_amend_after_repair` stages those changed source files and amends the current patch commit. Keep runner-generated progress, manifest, and config files outside the LLVM worktree, for example under `../output/`, so `git status` stays focused on source changes.
 
 ## Progress Dashboard
 
@@ -132,10 +133,10 @@ python3 skills/agent-memory/scripts/memory.py record \
 
 python3 skills/agent-memory/scripts/memory.py promote --id <memory-id> --reviewer human
 python3 skills/agent-memory/scripts/memory.py search --query moveBefore
-python3 skills/agent-memory/scripts/memory.py summarize-session --progress progress-master --session-id pilot-20
+python3 skills/agent-memory/scripts/memory.py summarize-session --progress ../output/progress-master --session-id pilot-20
 ```
 
-To let the runner create candidate memories for attention states, enable this in `runner-config.json`:
+To let the runner create candidate memories for attention states, enable this in `../output/runner-config.json`:
 
 ```json
 {

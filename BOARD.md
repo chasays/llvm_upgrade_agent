@@ -52,6 +52,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - [x] 2026-05-08: Add `metaxgpu-cherry-pick-operator` skill so Claude can respond to short commands like `continue next 20 patches` and `fix conflict`.
 - [x] 2026-05-11: Add `agent-memory` skill with JSONL candidate/trusted memories, search, promotion, and session summaries.
 - [x] 2026-05-11: Add optional `--memory-dir` hooks to `llvm-api-grounding`, `lit-failure-triage`, and `alive2-verify`.
+- [x] 2026-05-11: Move LLVM22 pilot manifest, runner config, and `progress-master` guidance to a sibling `output/` directory to avoid polluting the LLVM22 worktree.
 
 ## Blocked
 

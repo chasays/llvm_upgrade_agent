@@ -26,7 +26,8 @@ Run downstream LLVM patches one by one while keeping the process resumable and o
 Create a default config:
 
 ```bash
-python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-config --output runner-config.json
+mkdir -p ../output
+python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-config --output ../output/runner-config.json
 ```
 
 Create a manifest from a git range:
@@ -34,16 +35,16 @@ Create a manifest from a git range:
 ```bash
 python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py init-manifest \
   --range old_base..metaxgpu_branch \
-  --output patches.jsonl
+  --output ../output/patches.jsonl
 ```
 
 Run the serial upgrade loop:
 
 ```bash
 python3 skills/cherry-pick-runner/scripts/cherry_pick_runner.py run \
-  --manifest patches.jsonl \
-  --config runner-config.json \
-  --progress progress \
+  --manifest ../output/patches.jsonl \
+  --config ../output/runner-config.json \
+  --progress ../output/progress \
   --workers 1
 ```
 

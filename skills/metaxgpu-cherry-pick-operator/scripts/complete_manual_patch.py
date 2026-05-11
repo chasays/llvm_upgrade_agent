@@ -76,8 +76,8 @@ def render_dashboard(progress: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--progress", default="progress-master", help="Progress directory containing events.jsonl")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--progress", default="../output/progress-master", help="Progress directory containing events.jsonl")
     parser.add_argument("--sha", help="Specific original patch sha to mark done. Defaults to latest attention event.")
     parser.add_argument("--agent", default="claude-001")
     parser.add_argument("--message", default="manual conflict resolution completed")

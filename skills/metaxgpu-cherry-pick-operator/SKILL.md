@@ -14,9 +14,9 @@ Run from the LLVM22 repo on `metaxgpu-llvm22-pilot`.
 Expected files:
 
 ```text
-patches-master.jsonl
-runner-config.json
-progress-master/
+../output/patches-master.jsonl
+../output/runner-config.json
+../output/progress-master/
 ```
 
 Expected skills:
@@ -36,6 +36,8 @@ Use this when the user says `continue next patch`, `continue next 5 patches`, or
 2. Print:
 
 ```bash
+OUTPUT_DIR="${OUTPUT_DIR:-../output}"
+
 git branch --show-current
 git status --short
 ```
@@ -46,9 +48,9 @@ git status --short
 
 ```bash
 python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
-  --manifest patches-master.jsonl \
-  --config runner-config.json \
-  --progress progress-master \
+  --manifest "$OUTPUT_DIR/patches-master.jsonl" \
+  --config "$OUTPUT_DIR/runner-config.json" \
+  --progress "$OUTPUT_DIR/progress-master" \
   --workers 1 \
   --limit <count>
 ```
@@ -57,7 +59,7 @@ python3 "$CLAUDE_SKILLS"/cherry-pick-runner/scripts/cherry_pick_runner.py run \
 
 ```bash
 git status --short
-sed -n "1,180p" progress-master/DASHBOARD.md
+sed -n "1,180p" "$OUTPUT_DIR/progress-master/DASHBOARD.md"
 ```
 
 7. If the dashboard or runner output shows `CONFLICT`, `NEED_HUMAN`, `BLOCKED`, `BUILD_FAILED`, or `TEST_FAILED`, stop. Do not run another patch.
@@ -71,13 +73,15 @@ Do not run the cherry-pick runner again. Work only on the stopped patch.
 1. Inspect:
 
 ```bash
+OUTPUT_DIR="${OUTPUT_DIR:-../output}"
+
 git status --short
 git diff --name-only --diff-filter=U
-sed -n "1,180p" progress-master/DASHBOARD.md
-ls -t progress-master/packets | head
+sed -n "1,180p" "$OUTPUT_DIR/progress-master/DASHBOARD.md"
+ls -t "$OUTPUT_DIR/progress-master/packets" | head
 ```
 
-2. Read the newest packet under `progress-master/packets/`.
+2. Read the newest packet under `$OUTPUT_DIR/progress-master/packets/`.
 3. For each conflicted file, use `git-conflict-context` or run:
 
 ```bash
@@ -85,7 +89,7 @@ CONFLICT_FILE=<conflicted-file>
 
 python3 "$CLAUDE_SKILLS"/git-conflict-context/scripts/collect_conflict_context.py \
   "$CONFLICT_FILE" \
-  --output "progress-master/packets/$(basename "$CONFLICT_FILE").context.md"
+  --output "$OUTPUT_DIR/progress-master/packets/$(basename "$CONFLICT_FILE").context.md"
 ```
 
 4. Resolve by preserving:
@@ -110,7 +114,7 @@ git diff --check
 git add <resolved-files>
 git cherry-pick --continue
 python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_patch.py \
-  --progress progress-master \
+  --progress "$OUTPUT_DIR/progress-master" \
   --agent claude-001
 ```
 
@@ -119,7 +123,7 @@ python3 "$CLAUDE_SKILLS"/metaxgpu-cherry-pick-operator/scripts/complete_manual_p
 ```bash
 git log -1 --oneline
 git status --short
-sed -n "1,180p" progress-master/DASHBOARD.md
+sed -n "1,180p" "$OUTPUT_DIR/progress-master/DASHBOARD.md"
 ```
 
 Then stop.
