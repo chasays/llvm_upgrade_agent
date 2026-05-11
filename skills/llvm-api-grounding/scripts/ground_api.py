@@ -74,12 +74,43 @@ def context(repo, match_line, radius):
     return "\n".join(rendered)
 
 
+def record_memory(memory_dir, symbol, repo, matches):
+    if not memory_dir or not matches:
+        return
+    script = Path(__file__).resolve().parents[2] / "agent-memory" / "scripts" / "memory.py"
+    if not script.exists():
+        return
+    cmd = [
+        sys.executable,
+        str(script),
+        "record",
+        "--memory-dir",
+        str(memory_dir),
+        "--kind",
+        "llvm-api-grounding",
+        "--summary",
+        f"Grounded LLVM API `{symbol}` with {len(matches)} local matches.",
+        "--source",
+        f"{repo}:{matches[0]}",
+        "--confidence",
+        "trusted",
+        "--applies-to",
+        "local-llvm-source",
+        "--applies-to",
+        symbol,
+    ]
+    for match in matches[:5]:
+        cmd.extend(["--evidence", match])
+    subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("symbols", nargs="+", help="Symbols or literal API strings to ground")
     parser.add_argument("--repo", default=os.environ.get("LLVM_REPO", "."), help="LLVM project checkout")
     parser.add_argument("--max-results", type=int, default=30)
     parser.add_argument("--context", type=int, default=3)
+    parser.add_argument("--memory-dir", help="Optional agent-memory directory for trusted grounding evidence")
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
@@ -99,6 +130,7 @@ def main():
             print("No literal matches found. Treat this API as ungrounded until another search proves it exists.\n")
             exit_code = 1
             continue
+        record_memory(args.memory_dir, symbol, repo, matches)
         for match in matches:
             print(f"### {match.split(':', 2)[0]}\n")
             print("```text")
@@ -110,4 +142,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

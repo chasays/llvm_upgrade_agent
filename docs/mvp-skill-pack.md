@@ -27,6 +27,7 @@ Use this when MiniMax M2.5 is only available inside CodeBuddy:
 9. The runner verifies with build, lit, `update-test-checks`, `tablegen-expand`, and `alive2-verify` as configured.
 10. `downstream-patch-ledger` records durable patch state.
 11. `patch-progress-dashboard` renders shared progress files into `DASHBOARD.md`, `dashboard.html`, and JSON summaries.
+12. `agent-memory` records reusable candidate lessons and promotes only reviewed or verified experience into trusted memory.
 
 ## Cherry-Pick Runner
 
@@ -106,6 +107,52 @@ python3 skills/patch-progress-dashboard/scripts/render_dashboard.py progress/
 
 Every patch state transition should append one JSON object to `progress/events.jsonl`. Every worker should update only its own `progress/agents/<agent-id>.json` heartbeat. A patch without a progress event is treated as unfinished.
 
+## Agent Memory
+
+Use `agent-memory` for knowledge that should survive model context limits and future handoffs:
+
+```text
+memories/
+  candidates.jsonl
+  trusted.jsonl
+  session-summaries/
+```
+
+The rule is: write deterministic facts automatically, but keep model interpretations as candidates until build, lit, alive2, API grounding, or human review backs them. Good memory entries include a `kind`, short `summary`, `source`, `evidence`, and `applies_to` scope.
+
+Common commands:
+
+```bash
+python3 skills/agent-memory/scripts/memory.py record \
+  --kind llvm-api-change \
+  --summary "Use getIterator overload for moveBefore insertion points." \
+  --source llvm/include/llvm/IR/Instruction.h \
+  --applies-to LLVM22 \
+  --evidence "ninja check-llvm-codegen-metax passed"
+
+python3 skills/agent-memory/scripts/memory.py promote --id <memory-id> --reviewer human
+python3 skills/agent-memory/scripts/memory.py search --query moveBefore
+python3 skills/agent-memory/scripts/memory.py summarize-session --progress progress-master --session-id pilot-20
+```
+
+To let the runner create candidate memories for attention states, enable this in `runner-config.json`:
+
+```json
+{
+  "memory": {
+    "enabled": true,
+    "memory_dir": "memories",
+    "record_attention": true
+  }
+}
+```
+
+Several deterministic skills can also write memory when called with `--memory-dir memories`:
+
+- `llvm-api-grounding` records successful local-source grounding as trusted memory.
+- `lit-failure-triage` records classifications as candidate memory.
+- `alive2-verify` records pass results as trusted memory and blockers as candidate memory.
+
 ## Long-Term Flow
 
 When Claude/GPT-class API access exists, keep the same skills and replace the CodeBuddy manual step with API workers:
@@ -118,6 +165,7 @@ When Claude/GPT-class API access exists, keep the same skills and replace the Co
 - `lit-triager`: uses `lit-failure-triage` and `update-test-checks`.
 - `validator`: runs `alive2-verify`, `tablegen-expand`, kernel smoke tests, and fuzzing.
 - `dashboard`: uses `patch-progress-dashboard` to publish local progress for humans and automation.
+- `memory-curator`: uses `agent-memory` to promote verified lessons and summarize sessions.
 
 ## Validate
 

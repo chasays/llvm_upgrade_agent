@@ -14,12 +14,14 @@ Ground every LLVM API claim in the checked-out source tree before editing. Do no
 3. Use only APIs that appear in the script output or in files you explicitly read afterward.
 4. If no match is found, say the API is ungrounded and search for adjacent names or upstream replacement patterns.
 5. Put the grounding excerpt into the CodeBuddy work packet or worker prompt.
+6. When memory is enabled, record successful grounding as trusted local-source evidence.
 
 ## Command
 
 ```bash
 python3 skills/llvm-api-grounding/scripts/ground_api.py \
   --repo /path/to/llvm-project \
+  --memory-dir memories \
   "Instruction::moveBefore" "captures(none)"
 ```
 
@@ -32,4 +34,3 @@ export LLVM_REPO=/path/to/llvm-project
 ## Escalate
 
 Mark the task high risk if grounding involves IR transforms, SelectionDAG, GlobalISel, TableGen-generated APIs, debug info, ABI, or target lowering.
-

@@ -19,6 +19,7 @@ Run downstream LLVM patches one by one while keeping the process resumable and o
 - Write every state transition to `progress/events.jsonl`.
 - Generate repair packets under `progress/packets/` for CodeBuddy/MiniMax M2.5 or a configured repair command.
 - Amend successful repair edits into the current cherry-picked patch when `auto_amend_after_repair` is enabled.
+- If `memory.enabled` is true, record attention states as candidate memories through `agent-memory`.
 
 ## Commands
 
@@ -51,3 +52,19 @@ Use `--dry-run` to validate manifest ordering, gate selection, progress files, a
 ## Repair Integration
 
 If `build_repair.command` or `test_repair.command` is configured, the runner executes it after writing the packet path to environment variables. If the command fixes files and the gate then passes, `auto_amend_after_repair` stages the changed source files and amends the current patch commit. If no repair command is configured, the runner records `NEED_HUMAN` and stops with the packet ready to paste into CodeBuddy.
+
+## Memory Integration
+
+By default memory recording is off. Enable candidate memory recording for conflicts, blocked states, and build/test failures:
+
+```json
+{
+  "memory": {
+    "enabled": true,
+    "memory_dir": "memories",
+    "record_attention": true
+  }
+}
+```
+
+The runner writes only candidate memories. Promote them with `agent-memory` after verification or human review.

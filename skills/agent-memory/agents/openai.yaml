@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Memory"
+  short_description: "Record and search durable LLVM upgrade memories."
+  default_prompt: "Use $agent-memory to record, promote, search, or summarize local LLVM upgrade memories."

@@ -1,6 +1,6 @@
 # LLVM Upgrade Agent Board
 
-Last reviewed: 2026-05-08
+Last reviewed: 2026-05-11
 
 ## Current MVP
 
@@ -13,6 +13,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - A ledger-first progress dashboard for long cherry-pick runs, generated from JSONL events and agent heartbeat files.
 - A short-term workflow for CodeBuddy/MiniMax M2.5 work packets.
 - A long-term path to replace the interactive model step with Claude/GPT-class API workers.
+- A local memory layer that separates live progress, per-patch ledger state, and reviewed reusable lessons.
 
 ## Doing
 
@@ -49,6 +50,8 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - [x] 2026-05-08: Replace the older intranet startup TODO with `docs/claude-preflight.md` as the single pre-Claude preparation guide.
 - [x] 2026-05-08: Add `docs/ai-agent-share.md` as a leadership and teammate sharing note with Mermaid diagrams explaining the LLVM Upgrade Agent MVP and the value of AI agents.
 - [x] 2026-05-08: Add `metaxgpu-cherry-pick-operator` skill so Claude can respond to short commands like `continue next 20 patches` and `fix conflict`.
+- [x] 2026-05-11: Add `agent-memory` skill with JSONL candidate/trusted memories, search, promotion, and session summaries.
+- [x] 2026-05-11: Add optional `--memory-dir` hooks to `llvm-api-grounding`, `lit-failure-triage`, and `alive2-verify`.
 
 ## Blocked
 
@@ -62,6 +65,7 @@ Build a portable, intranet-friendly MVP for the LLVM upgrade agent:
 - The long-term architecture should preserve the same state machine and skills, then swap in API-based Claude/GPT-class worker models.
 - Silent miscompile and fabricated LLVM APIs are the top two risks.
 - The first progress format is JSONL events plus per-agent heartbeat JSON. SQLite can be added later as a query/cache layer, but sub-agents should not depend on it.
+- The first memory format is JSONL under `memories/`. Deterministic facts can be recorded automatically; model interpretations stay candidates until verified or reviewed.
 - The first runner mode is strict serial in one worktree. `worker_count` is configurable but values above `1` are rejected until separate worktrees and ordered landing exist.
 - The first gate strategy is hybrid: quick by default, heavy for high-risk patches, and full every configured interval.
 

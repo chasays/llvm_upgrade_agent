@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     ],
     "build_repair": {"max_attempts": 3, "command": []},
     "test_repair": {"max_attempts": 2, "command": []},
+    "memory": {"enabled": False, "memory_dir": "memories", "record_attention": True},
 }
 
 
@@ -106,6 +107,7 @@ def latest_states(progress: Path) -> dict[str, str]:
 
 
 def event(progress: Path, agent: str, patch: dict[str, Any], state: str, message: str, **extra: Any) -> None:
+    memory_config = extra.pop("memory_config", None)
     row = {
         "ts": utc_now(),
         "agent": agent,
@@ -119,6 +121,60 @@ def event(progress: Path, agent: str, patch: dict[str, Any], state: str, message
     row.update(extra)
     append_jsonl(progress / "events.jsonl", row)
     heartbeat(progress, agent, patch, state)
+    record_attention_memory(progress, row, memory_config)
+
+
+def configured_memory_dir(progress: Path, config: dict[str, Any]) -> Path | None:
+    memory = config.get("memory") or {}
+    if not memory.get("enabled"):
+        return None
+    raw = Path(str(memory.get("memory_dir") or "memories"))
+    return raw if raw.is_absolute() else progress.parent / raw
+
+
+def record_attention_memory(progress: Path, event_row: dict[str, Any], config: dict[str, Any] | None) -> None:
+    if not config:
+        return
+    memory = config.get("memory") or {}
+    if not memory.get("enabled") or not memory.get("record_attention", True):
+        return
+    state = str(event_row.get("state", ""))
+    if state not in ATTENTION_STATES:
+        return
+    script = Path(__file__).resolve().parents[2] / "agent-memory" / "scripts" / "memory.py"
+    if not script.exists():
+        return
+    memory_dir = configured_memory_dir(progress, config)
+    if memory_dir is None:
+        return
+    message = str(event_row.get("message", ""))
+    source = str(event_row.get("packet", "")) or str(progress / "events.jsonl")
+    cmd = [
+        sys.executable,
+        str(script),
+        "record",
+        "--memory-dir",
+        str(memory_dir),
+        "--kind",
+        "runner-attention",
+        "--summary",
+        f"{state}: {message}",
+        "--source",
+        source,
+        "--sha",
+        str(event_row.get("sha", "")),
+        "--seq",
+        str(event_row.get("seq", "")),
+        "--applies-to",
+        "cherry-pick-runner",
+        "--applies-to",
+        state,
+        "--evidence",
+        message,
+    ]
+    for file_name in event_row.get("files") or []:
+        cmd.extend(["--file", str(file_name)])
+    subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def heartbeat(progress: Path, agent: str, patch: dict[str, Any], state: str, status: str = "working") -> None:
@@ -359,15 +415,15 @@ def amend_if_dirty(cwd: Path, ignored_paths: list[Path], config: dict[str, Any],
     if not paths:
         return True
     if not config.get("auto_amend_after_repair", True):
-        event(progress, agent, patch, "NEED_HUMAN", "repair changed files; auto amend disabled", gate=gate, files=paths)
+        event(progress, agent, patch, "NEED_HUMAN", "repair changed files; auto amend disabled", gate=gate, files=paths, memory_config=config)
         return False
     add = git(["add", "--", *paths], cwd)
     if add.returncode != 0:
-        event(progress, agent, patch, "BLOCKED", f"failed to stage repair changes: {add.stderr}", gate=gate, files=paths)
+        event(progress, agent, patch, "BLOCKED", f"failed to stage repair changes: {add.stderr}", gate=gate, files=paths, memory_config=config)
         return False
     commit = git(["commit", "--amend", "--no-edit"], cwd)
     if commit.returncode != 0:
-        event(progress, agent, patch, "BLOCKED", f"failed to amend repair changes: {commit.stderr}", gate=gate, files=paths)
+        event(progress, agent, patch, "BLOCKED", f"failed to amend repair changes: {commit.stderr}", gate=gate, files=paths, memory_config=config)
         return False
     event(progress, agent, patch, "AMENDED", "repair changes amended into current patch", gate=gate, files=paths)
     return True
@@ -395,9 +451,9 @@ def run_build_or_test(
             event(progress, agent, patch, f"{kind.upper()}_PASSED", f"{kind} gate passed", gate=gate)
             return True
         packet = write_repair_packet(progress, patch, kind, command, output, gate)
-        event(progress, agent, patch, f"{kind.upper()}_FAILED", f"{kind} gate failed; packet: {packet}", gate=gate, packet=str(packet))
+        event(progress, agent, patch, f"{kind.upper()}_FAILED", f"{kind} gate failed; packet: {packet}", gate=gate, packet=str(packet), memory_config=config)
         if attempt >= attempts or not run_repair(kind, config, packet, patch, cwd):
-            event(progress, agent, patch, "NEED_HUMAN", f"{kind} repair exhausted; packet: {packet}", gate=gate, packet=str(packet))
+            event(progress, agent, patch, "NEED_HUMAN", f"{kind} repair exhausted; packet: {packet}", gate=gate, packet=str(packet), memory_config=config)
             return False
     return False
 
@@ -440,7 +496,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     agent = args.agent
     processed = 0
     cwd = Path(args.cwd)
-    ignored_paths = ignored_paths_for(cwd, [Path(args.manifest), Path(args.config) if args.config else None, progress])
+    ignored_paths = ignored_paths_for(cwd, [Path(args.manifest), Path(args.config) if args.config else None, progress, configured_memory_dir(progress, config)])
     for patch in manifest:
         sha = str(patch.get("sha", "")).strip()
         if not sha:
@@ -481,14 +537,14 @@ def process_patch(
         event(progress, agent, patch, "CLEAN", "dry-run cherry-pick skipped", gate=gate)
     else:
         if workspace_dirty(cwd, ignored_paths):
-            event(progress, agent, patch, "BLOCKED", "workspace is dirty before cherry-pick", gate=gate)
+            event(progress, agent, patch, "BLOCKED", "workspace is dirty before cherry-pick", gate=gate, memory_config=config)
             return 1
         proc = git(["cherry-pick", "-x", str(patch["sha"])], cwd)
         if proc.returncode != 0:
             if has_unmerged_files(cwd):
                 packet = write_conflict_packet(progress, patch, cwd)
-                event(progress, agent, patch, "CONFLICT", f"cherry-pick conflict; packet: {packet}", gate=gate, packet=str(packet))
-                event(progress, agent, patch, "NEED_HUMAN", f"resolve conflict then resume; packet: {packet}", gate=gate, packet=str(packet))
+                event(progress, agent, patch, "CONFLICT", f"cherry-pick conflict; packet: {packet}", gate=gate, packet=str(packet), memory_config=config)
+                event(progress, agent, patch, "NEED_HUMAN", f"resolve conflict then resume; packet: {packet}", gate=gate, packet=str(packet), memory_config=config)
                 return 1
             output = proc.stdout + proc.stderr
             if "previous cherry-pick is now empty" in output.lower() or "nothing to commit" in output.lower():
@@ -496,7 +552,7 @@ def process_patch(
                 event(progress, agent, patch, "EMPTY", "empty cherry-pick skipped", gate=gate)
                 return 0
             packet = write_repair_packet(progress, patch, "cherry-pick", "git cherry-pick -x", output, gate)
-            event(progress, agent, patch, "BLOCKED", f"cherry-pick failed; packet: {packet}", gate=gate, packet=str(packet))
+            event(progress, agent, patch, "BLOCKED", f"cherry-pick failed; packet: {packet}", gate=gate, packet=str(packet), memory_config=config)
             return 1
         event(progress, agent, patch, "CLEAN", "cherry-pick applied", gate=gate)
     build_commands, test_commands = gate_commands(gate, config)
